@@ -1,68 +1,86 @@
-
 import streamlit as st
 import pandas as pd
-import folium
-from streamlit_folium import folium_static
+import numpy as np
+import matplotlib.pyplot as plt
 
-st.set_page_config(layout="wide", page_title="Mapa de Residuos en Colombia")
+st.set_page_config(layout="wide", page_title="Escenarios Prospectivos de Residuos")
+
+# Parámetros
+anios = np.arange(2023, 2044)
+tasa_crecimiento = 0.012
+g_pc_dia = 0.74  # kg/hab/día
+g_pc_anual = g_pc_dia * 365 / 1000  # ton/hab/año
 
 # Datos base
-data = [
-    {"Ciudad": "Bogotá D.C.", "Lat": 4.7110, "Lon": -74.0721, "Población": 7968095, "Disposición": 6270.48, "Aprovechamiento": 4710.86, "Tasa": 42.9, "Relleno": "Doña Juana"},
-    {"Ciudad": "Medellín", "Lat": 6.2518, "Lon": -75.5636, "Población": 2653729, "Disposición": 1887.03, "Aprovechamiento": 322.60, "Tasa": 14.6, "Relleno": "La Pradera"},
-    {"Ciudad": "Cali", "Lat": 3.4516, "Lon": -76.5319, "Población": 2297230, "Disposición": 1650.67, "Aprovechamiento": 129.63, "Tasa": 7.28, "Relleno": "Colomba - El Guabal"},
-    {"Ciudad": "Barranquilla", "Lat": 10.9639, "Lon": -74.7964, "Población": 1327209, "Disposición": 1563.53, "Aprovechamiento": 191.02, "Tasa": 10.89, "Relleno": "Los Pocitos"},
-    {"Ciudad": "Cartagena", "Lat": 10.3910, "Lon": -75.4794, "Población": 1065570, "Disposición": 1404.52, "Aprovechamiento": 22.61, "Tasa": 1.58, "Relleno": "Loma de los Cocos"},
-    {"Ciudad": "Soacha", "Lat": 4.5793, "Lon": -74.2144, "Población": 831259, "Disposición": 475.28, "Aprovechamiento": 160.84, "Tasa": 25.28, "Relleno": "Nuevo Mondoñedo"},
-    {"Ciudad": "Cúcuta", "Lat": 7.8891, "Lon": -72.4967, "Población": 795608, "Disposición": 703.66, "Aprovechamiento": 22.23, "Tasa": 3.06, "Relleno": "Guayabal"},
-    {"Ciudad": "Soledad", "Lat": 10.9184, "Lon": -74.7673, "Población": 692799, "Disposición": 591.13, "Aprovechamiento": 33.74, "Tasa": 5.40, "Relleno": "Los Pocitos"},
-    {"Ciudad": "Bucaramanga", "Lat": 7.1193, "Lon": -73.1227, "Población": 623378, "Disposición": 500.17, "Aprovechamiento": 20.06, "Tasa": 3.86, "Relleno": "El Carrasco"},
-    {"Ciudad": "Bello", "Lat": 6.3389, "Lon": -75.5628, "Población": 578376, "Disposición": 330.61, "Aprovechamiento": 66.76, "Tasa": 16.80, "Relleno": "La Pradera"}
-]
-df = pd.DataFrame(data)
+ciudades = {
+    "Bogotá D.C.": {"Poblacion": 7968095, "TA_inicial": 0.4290},
+    "Medellín": {"Poblacion": 2653729, "TA_inicial": 0.1460},
+    "Cali": {"Poblacion": 2297230, "TA_inicial": 0.0782},
+    "Barranquilla": {"Poblacion": 1327209, "TA_inicial": 0.1089},
+    "Cartagena": {"Poblacion": 1065570, "TA_inicial": 0.0158},
+    "Soacha": {"Poblacion": 831259, "TA_inicial": 0.2528},
+    "Cúcuta": {"Poblacion": 795608, "TA_inicial": 0.0306},
+    "Soledad": {"Poblacion": 692799, "TA_inicial": 0.0540},
+    "Bucaramanga": {"Poblacion": 623378, "TA_inicial": 0.0386},
+    "Bello": {"Poblacion": 578376, "TA_inicial": 0.1680}
+}
+
+composicion = {
+    "Orgánicos": 0.47,
+    "Plásticos": 0.12,
+    "Vidrios": 0.04,
+    "Textiles": 0.02
+}
 
 # Sidebar
-st.sidebar.title("Filtros")
-ciudades_seleccionadas = st.sidebar.multiselect("Selecciona ciudades", df["Ciudad"].tolist(), default=df["Ciudad"].tolist())
-umbral_500 = st.sidebar.checkbox("Solo mostrar ciudades con > 500 toneladas/día")
-umbral_1000 = st.sidebar.checkbox("Mostrar ciudades con > 1000 toneladas/día")
-umbral_2000 = st.sidebar.checkbox("Mostrar ciudades con > 2000 toneladas/día")
+st.sidebar.title("Escenarios Prospectivos por Ciudad")
+seleccion_ciudad = None
+for ciudad in ciudades:
+    if st.sidebar.button(f"Simular {ciudad}"):
+        seleccion_ciudad = ciudad
 
-# Filtro de datos
-df_filtrado = df[df["Ciudad"].isin(ciudades_seleccionadas)]
-if umbral_500:
-    df_filtrado = df_filtrado[df_filtrado["Disposición"] > 500]
-if umbral_1000:
-    df_filtrado = df_filtrado[df_filtrado["Disposición"] > 1000]
-if umbral_2000:
-    df_filtrado = df_filtrado[df_filtrado["Disposición"] > 2000]
+if seleccion_ciudad:
+    # Simulación para la ciudad seleccionada
+    df_ciudad = pd.DataFrame(index=anios, columns=composicion.keys())
+    poblacion = ciudades[seleccion_ciudad]["Poblacion"]
+    ta = ciudades[seleccion_ciudad]["TA_inicial"]
 
-# Layout principal
-st.title("📍 Mapa de Residuos en las 10 Ciudades más Pobladas de Colombia")
-st.subheader("📊 Resumen de ciudades seleccionadas")
-st.dataframe(df_filtrado[["Ciudad", "Disposición", "Aprovechamiento", "Tasa"]], use_container_width=True)
+    for anio in anios:
+        poblacion_anio = poblacion * ((1 + tasa_crecimiento) ** (anio - 2023))
+        if anio % 5 == 3 and anio != 2023:
+            if seleccion_ciudad == "Bogotá D.C.":
+                ta = min(ta + 0.10, 1.0)
+            elif ta < 0.20:
+                ta = min(ta * 2, 1.0)
 
-# Crear mapa
-mapa = folium.Map(location=[4.5709, -74.2973], zoom_start=6, tiles="CartoDB positron")
-for _, row in df_filtrado.iterrows():
-    info = f"<b>{row['Ciudad']}</b><br>Disposición: {row['Disposición']} ton/día<br>Aprovechamiento: {row['Aprovechamiento']} ton/día<br>Tasa: {row['Tasa']}%<br>Relleno: {row['Relleno']}"
-    color = "green" if row["Tasa"] > 20 else "orange" if row["Tasa"] > 10 else "red"
-    folium.CircleMarker(
-        location=[row["Lat"], row["Lon"]],
-        radius=10,
-        color="blue",
-        fill=True,
-        fill_color=color,
-        fill_opacity=0.7,
-        popup=folium.Popup(info, max_width=250),
-        tooltip=row["Ciudad"]
-    ).add_to(mapa)
+        for tipo, fraccion in composicion.items():
+            total_residuos = poblacion_anio * g_pc_anual * fraccion
+            df_ciudad.loc[anio, tipo] = total_residuos * ta
 
-# Mostrar mapa
-folium_static(mapa)
+    df_ciudad = df_ciudad.astype(float)
 
-# Leyenda visual
-with st.expander("🖍️ Ver leyenda de colores"):
-    st.markdown("- 🔴 **Rojo**: Tasa de aprovechamiento < 10%")
-    st.markdown("- 🟠 **Naranja**: Tasa de aprovechamiento entre 10% y 20%")
-    st.markdown("- 🟢 **Verde**: Tasa de aprovechamiento > 20%")
+    # Visualización
+    st.title("🔮 Escenarios Prospectivos de Aprovechamiento de Residuos")
+    st.subheader(f"📍 Ciudad: {seleccion_ciudad} | Periodo: 2023–2043")
+
+    fig, axs = plt.subplots(2, 2, figsize=(14, 8))
+    axs = axs.ravel()
+
+    for i, tipo in enumerate(composicion.keys()):
+        axs[i].plot(df_ciudad.index, df_ciudad[tipo], color="green", linewidth=2)
+        axs[i].set_title(f"Aprovechamiento de {tipo}", fontsize=10)
+        axs[i].set_xlabel("Año")
+        axs[i].set_ylabel("Toneladas")
+        axs[i].grid(True)
+
+    plt.tight_layout()
+    st.pyplot(fig)
+
+    with st.expander("🖍️ Leyenda de colores"):
+        st.markdown("- 🔴 **Rojo**: Tasa < 10% (no aplica si está fuera del umbral)")
+        st.markdown("- 🟠 **Naranja**: Tasa entre 10% y 20%")
+        st.markdown("- 🟢 **Verde**: Tasa > 20%")
+        st.markdown("Todas las gráficas usan el mismo color para armonía visual.")
+else:
+    st.title("📊 Escenarios Prospectivos de Residuos")
+    st.write("Selecciona una ciudad en el panel izquierdo para ver su proyección de aprovechamiento de residuos.")
